@@ -1,6 +1,8 @@
 package be.uchrony.ubeacon;
 
+import android.app.ActivityManager;
 import android.app.Dialog;
+import android.app.NotificationManager;
 import android.bluetooth.BluetoothAdapter;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -9,17 +11,16 @@ import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.wifi.WifiManager;
 import android.os.RemoteException;
+import android.support.v4.app.NotificationCompat;
 import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
-import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.WebView;
 import android.widget.Button;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import org.altbeacon.beacon.Beacon;
@@ -58,10 +59,10 @@ public class MainActivity extends ActionBarActivity implements BeaconConsumer{
     private List<Produit> listeProduits = new ArrayList<>();
     private List<Ibeacon> listeIbeaconsScanner = new ArrayList<>();
     private Produit dernierProduit = null;
-    private TextView tvInfo;
     private BeaconManager beaconManager;
     private Region regionUchrony;
     private boolean enCoursDeScan = false;
+    private int idNotification = 1 ;
 
 
     @Override
@@ -71,24 +72,18 @@ public class MainActivity extends ActionBarActivity implements BeaconConsumer{
 
         // initialisation des boutons et autre de la fenetre principale
         initElements();
-        //TODO Décomenter
+
         verificationBluetooth();
         verificationConnectionInternet();
         // TODO soucis si on est pas en ligne le temps d'activer le net
         // TODO on ne sera pas en ligne en gros faut attendre le while regle le souci
-
+        // TODO pour le moment ca marche
         while (!estEnLigne());
         recuperationUBeaconWebService();
         // initialisation la configuration des beacons
         initBeacon();
     }
 
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        getMenuInflater().inflate(R.menu.menu_main, menu);
-        return true;
-    }
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
@@ -115,6 +110,14 @@ public class MainActivity extends ActionBarActivity implements BeaconConsumer{
     }
 
     @Override
+    protected void onStart() {
+        super.onStart();
+        if (enCoursDeScan) {
+            startScan();
+        }
+    }
+
+    @Override
     protected void onRestart() {
         super.onRestart();
         if (enCoursDeScan) {
@@ -127,30 +130,71 @@ public class MainActivity extends ActionBarActivity implements BeaconConsumer{
     /*----------------------------------------------------------------------------------------*/
 
     private void lancerPopUp(Produit produit) {
-        final Dialog dialog = new Dialog(MainActivity.this);
-        LayoutInflater inflater = getLayoutInflater();
-        View popUpPub = inflater.inflate(R.layout.popup_pub
-                ,(ViewGroup) findViewById(R.id.popup_pub_id));
-        WebView webVue = (WebView) popUpPub.findViewById(R.id.web_vue_pub);
-        webVue.loadData(produit.getDescription(), "text/html", "utf-8");
-        dialog.setTitle(produit.getTitre());
-        dialog.setContentView(popUpPub);
-        dialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
-            @Override
-            public void onDismiss(DialogInterface dialog) {
-                if (!enCoursDeScan)
-                    startScan();
-            }
-        });
-        dialog.show();
+        if (estEnAvantPlan(this)) {
+            stopScan();
+            final Dialog dialog = new Dialog(MainActivity.this);
+            LayoutInflater inflater = getLayoutInflater();
+            View popUpPub = inflater.inflate(R.layout.popup_pub
+                    , (ViewGroup) findViewById(R.id.popup_pub_id));
+            WebView webVue = (WebView) popUpPub.findViewById(R.id.web_vue_pub);
+            webVue.loadData(produit.getDescription(), "text/html", "utf-8");
+            dialog.setTitle(produit.getTitre());
+            dialog.setContentView(popUpPub);
+            dialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
+                @Override
+                public void onDismiss(DialogInterface dialog) {
+                    if (!enCoursDeScan)
+                        startScan();
+                }
+            });
+            dialog.show();
+        } else {
 
+            // TODO je stop le scan que quand on est en avant plan
+            NotificationCompat.Builder mBuilder =
+                    new NotificationCompat.Builder(this)
+                            .setSmallIcon(R.drawable.kontakt_logo)
+                            .setContentTitle(produit.getTitre())
+                            .setContentText("bla bla bla....");
+/*
+            Intent resultIntent = new Intent(this, MainActivity.class);
+
+            TaskStackBuilder stackBuilder = TaskStackBuilder.create(this);
+            stackBuilder.addParentStack(MainActivity.class);
+            stackBuilder.addNextIntent(resultIntent);
+            PendingIntent resultPendingIntent = stackBuilder.getPendingIntent(0,PendingIntent.FLAG_UPDATE_CURRENT);
+            mBuilder.setContentIntent(resultPendingIntent);*/
+            NotificationManager mNotificationManager
+                    = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            mNotificationManager.notify(idNotification++, mBuilder.build());
+
+
+
+        }
+
+    }
+
+    private boolean estEnAvantPlan(Context context) {
+        ActivityManager activityManager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+        List<ActivityManager.RunningAppProcessInfo> appProcesses = activityManager.getRunningAppProcesses();
+        if (appProcesses == null) {
+            return false;
+        }
+        final String packageName = context.getPackageName();
+        for (ActivityManager.RunningAppProcessInfo appProcess : appProcesses) {
+            if (appProcess.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+                    && appProcess.processName.equals(packageName)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /*----------------------------------------------------------------------------------------*/
     /*----------------------------------  Web Service  ---------------------------------------*/
     /*----------------------------------------------------------------------------------------*/
 
-    private void miseAJourNbrVisite() {
+    private void miseAJourNbrVisite(final Produit produit) {
         RestAdapter ad = new RestAdapter.Builder()
                 .setEndpoint(InformationWebService.NOM_DOMAINE)
                 .build();
@@ -159,7 +203,7 @@ public class MainActivity extends ActionBarActivity implements BeaconConsumer{
 
         wsu.setNbrVisite(InformationWebService.USERNAME
                 , InformationWebService.PASSWORD
-                , "198", "ANDROID", new Callback<Response>() {
+                , produit.getId(), "ANDROID", new Callback<Response>() {
             @Override
             public void success(Response response, Response response2) {
                 Log.d(TAG_DEBUG, "success miseAJourNbrVisite" );
@@ -168,7 +212,7 @@ public class MainActivity extends ActionBarActivity implements BeaconConsumer{
             @Override
             public void failure(RetrofitError retrofitError) {
                 Log.d(TAG_DEBUG, "failure miseAJourNbrVisite");
-                MainActivity.this.miseAJourNbrVisite();
+                MainActivity.this.miseAJourNbrVisite(produit);
             }
         });
     }
@@ -187,7 +231,6 @@ public class MainActivity extends ActionBarActivity implements BeaconConsumer{
             public void success(List<UBeacon> ubeacons, Response response) {
                 Log.d(TAG_DEBUG, "success recuperationUBeaconWebService" + response.getStatus());
                 listeUBeacons = ubeacons;
-                tvInfo.append(listeUBeacons.toString());
                 recuperationProduitWebService();
             }
 
@@ -217,7 +260,6 @@ public class MainActivity extends ActionBarActivity implements BeaconConsumer{
                         @Override
                         public void success(List<Produit> produits, Response response) {
                             Log.d(TAG_DEBUG, "success recuperationProduitWebService " + response.getReason());
-                            tvInfo.append(produits.toString());
                             listeProduits.addAll(produits);
                         }
 
@@ -287,17 +329,12 @@ public class MainActivity extends ActionBarActivity implements BeaconConsumer{
                                 listeIbeaconsScanner.add(new Ibeacon(unB));
                             }
                             Collections.sort(listeIbeaconsScanner);
-                            tvInfo.setText("");
-                            for (Ibeacon unB : listeIbeaconsScanner) {
-                                tvInfo.append(unB.getId2().toInt() + " - " + unB.getDistance() + "\n");
-                            }
-
                             Produit p = Catalogue.getProduitLierAuUBeacon(listeIbeaconsScanner.get(0)
                                     , listeUBeacons, listeProduits);
 
                             if (p != null && (dernierProduit == null || !dernierProduit.equals(p))) {
-                                stopScan();
                                 lancerPopUp(p);
+                                MainActivity.this.miseAJourNbrVisite(p);
                                 dernierProduit = p;
                             }
                         }
@@ -311,7 +348,8 @@ public class MainActivity extends ActionBarActivity implements BeaconConsumer{
         regionUchrony = new Region("regionId", Identifier.parse("F7826DA6-4FA2-4E98-8024-BC5B71E0893E"),null,null);
         beaconManager = BeaconManager.getInstanceForApplication(this);
         beaconManager.getBeaconParsers().add(new BeaconParser().
-                setBeaconLayout("m:2-3=0215,i:4-19,i:20-21,i:22-23,p:24-24"));
+                setBeaconLayout("m:2-3=0215,i:4-19,i:20-21,i:22-23,p:24-24,d:25-25"));
+
         beaconManager.setBackgroundBetweenScanPeriod(0);
         beaconManager.setForegroundBetweenScanPeriod(0);
         beaconManager.setBackgroundScanPeriod(1000);
@@ -321,7 +359,6 @@ public class MainActivity extends ActionBarActivity implements BeaconConsumer{
 
     private void initElements() {
         Button btTest = (Button) findViewById(R.id.bt_test);
-        tvInfo = (TextView) findViewById(R.id.tv_info);
         btTest.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
