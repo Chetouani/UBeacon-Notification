@@ -1,7 +1,7 @@
 package be.uchrony.ubeacon.metier;
 
 /**
- * Created by Abdelhalim on 28/02/2015.
+ * Crée par Abdel le 28/02/2015.
  */
 public class Produit {
 
@@ -41,5 +41,21 @@ public class Produit {
                 ", Titre = '" + product_title  +
                 ", Description=' " + product_description +
                 '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        Produit produit = (Produit) o;
+
+        return product_id.equals(produit.product_id);
+
+    }
+
+    @Override
+    public int hashCode() {
+        return product_id.hashCode();
     }
 }

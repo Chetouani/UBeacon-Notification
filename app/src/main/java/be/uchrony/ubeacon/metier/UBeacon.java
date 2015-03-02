@@ -1,5 +1,9 @@
 package be.uchrony.ubeacon.metier;
 
+/**
+ * Crée par Abdel le 28/02/2015.
+ */
+
 public class UBeacon {
 
     private String ibeacon_id;
@@ -37,7 +41,6 @@ public class UBeacon {
         return ibeacon_minor;
     }
 
-
     @Override
     public String toString() {
         return "[ " +
@@ -48,4 +51,5 @@ public class UBeacon {
                 ", Minor = " + ibeacon_minor  +
                 ']';
     }
+
 }

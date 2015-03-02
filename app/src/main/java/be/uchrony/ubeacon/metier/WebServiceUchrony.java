@@ -9,7 +9,7 @@ import retrofit.http.FormUrlEncoded;
 import retrofit.http.POST;
 
 /**
- * Created by abdel on 1/03/15.
+ * Crée par Abdel le 28/02/2015.
  */
 public interface WebServiceUchrony {
 

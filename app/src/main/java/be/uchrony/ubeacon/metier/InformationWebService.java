@@ -1,7 +1,7 @@
 package be.uchrony.ubeacon.metier;
 
 /**
- * Created by abdel on 28/02/15.
+ * Crée par Abdel le 28/02/2015.
  */
 public class InformationWebService {
 
